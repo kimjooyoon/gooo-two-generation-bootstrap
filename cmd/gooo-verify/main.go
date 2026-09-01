@@ -9,7 +9,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/kimjooyoon/gooo-repository-bootstrap/internal/gooo"
+	"github.com/kimjooyoon/gooo-two-generation-bootstrap/internal/gooo"
 )
 
 func main() {

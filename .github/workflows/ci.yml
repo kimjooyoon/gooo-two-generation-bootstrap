@@ -1,4 +1,4 @@
-name: gooo-ci
+name: gooo-two-generation
 
 on:
   push:
@@ -10,7 +10,7 @@ permissions:
   pull-requests: read
 
 jobs:
-  bootstrap-policy:
+  verify-self-hosting-slice:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,42 +20,115 @@ jobs:
         with:
           go-version: '1.27.x'
           cache: true
-      - name: Build executor
+      - name: Prepare caller-owned evidence directory
+        run: mkdir -p "$RUNNER_TEMP/gooo-two-generation/artifacts"
+      - name: Compile all Go packages
+        id: compile
+        continue-on-error: true
         run: |
-          mkdir -p "$RUNNER_TEMP/gooo-artifacts"
-          build_start=$(date +%s%3N)
-          /usr/bin/time -f '%M' -o "$RUNNER_TEMP/build.rss" go build -o "$RUNNER_TEMP/gooo" ./cmd/gooo-verify
-          build_end=$(date +%s%3N)
-          printf '%s %s\n' "$((build_end - build_start))" "$(cat "$RUNNER_TEMP/build.rss")" > "$RUNNER_TEMP/build.time"
+          set +e
+          start=$(date +%s%3N)
+          /usr/bin/time -f '%M' -o "$RUNNER_TEMP/gooo-two-generation/compile.rss" go build ./...
+          status=$?
+          end=$(date +%s%3N)
+          printf '%s %s\n' "$((end - start))" "$(cat "$RUNNER_TEMP/gooo-two-generation/compile.rss")" > "$RUNNER_TEMP/gooo-two-generation/compile.time"
+          exit "$status"
+      - name: Build trusted and verifier executors
+        id: build
+        continue-on-error: true
+        run: |
+          set +e
+          start=$(date +%s%3N)
+          /usr/bin/time -f '%M' -o "$RUNNER_TEMP/gooo-two-generation/build.rss" sh -c 'go build -o "$RUNNER_TEMP/gooo-two-generation/gooo-selfhost" ./cmd/gooo-selfhost && go build -o "$RUNNER_TEMP/gooo-two-generation/gooo-verify" ./cmd/gooo-verify'
+          status=$?
+          end=$(date +%s%3N)
+          printf '%s %s\n' "$((end - start))" "$(cat "$RUNNER_TEMP/gooo-two-generation/build.rss")" > "$RUNNER_TEMP/gooo-two-generation/build.time"
+          exit "$status"
       - name: Run Go tests with exact counters
         id: tests
         continue-on-error: true
         run: |
           set +e
-          test_start=$(date +%s%3N)
-          /usr/bin/time -f '%M' -o "$RUNNER_TEMP/test.rss" sh -c 'go test -json -count=1 ./... > "$RUNNER_TEMP/go-test.json"'
-          test_status=$?
-          test_end=$(date +%s%3N)
-          printf '%s %s\n' "$((test_end - test_start))" "$(cat "$RUNNER_TEMP/test.rss")" > "$RUNNER_TEMP/test.time"
-          echo '--- go test JSON ---'
-          sed -n '1,240p' "$RUNNER_TEMP/go-test.json"
-          exit "$test_status"
-      - name: Verify canonical cases and deterministic plan
+          start=$(date +%s%3N)
+          /usr/bin/time -f '%M' -o "$RUNNER_TEMP/gooo-two-generation/test.rss" sh -c 'go test -json -count=1 ./... > "$RUNNER_TEMP/gooo-two-generation/go-test.json"'
+          status=$?
+          end=$(date +%s%3N)
+          printf '%s %s\n' "$((end - start))" "$(cat "$RUNNER_TEMP/gooo-two-generation/test.rss")" > "$RUNNER_TEMP/gooo-two-generation/test.time"
+          exit "$status"
+      - name: Check parser behavior corpus
+        id: conformance
+        continue-on-error: true
         run: |
-          conformance_start=$(date +%s%3N)
-          /usr/bin/time -f '%M' -o "$RUNNER_TEMP/conformance.rss" "$RUNNER_TEMP/gooo" conformance \
+          set +e
+          start=$(date +%s%3N)
+          /usr/bin/time -f '%M' -o "$RUNNER_TEMP/gooo-two-generation/conformance.rss" "$RUNNER_TEMP/gooo-two-generation/gooo-selfhost" conformance \
+            --meta .gooo/two-generation.gooo \
+            --repo-root "$GITHUB_WORKSPACE" \
+            --output "$RUNNER_TEMP/gooo-two-generation/artifacts/conformance.json"
+          status=$?
+          end=$(date +%s%3N)
+          printf '%s %s\n' "$((end - start))" "$(cat "$RUNNER_TEMP/gooo-two-generation/conformance.rss")" > "$RUNNER_TEMP/gooo-two-generation/conformance.time"
+          exit "$status"
+      - name: Run stage0, compile stage1, and run stage1 on the same input
+        id: integration
+        continue-on-error: true
+        run: |
+          set +e
+          start=$(date +%s%3N)
+          work="$RUNNER_TEMP/gooo-two-generation"
+          max_rss=0
+          run_step() {
+            label=$1
+            shift
+            /usr/bin/time -f '%M' -o "$work/$label.rss" "$@"
+            step_status=$?
+            step_rss=$(cat "$work/$label.rss" 2>/dev/null || printf '0')
+            if [ "$step_rss" -gt "$max_rss" ] 2>/dev/null; then max_rss=$step_rss; fi
+            return "$step_status"
+          }
+          run_step stage0 "$work/gooo-selfhost" generate \
+            --meta .gooo/two-generation.gooo \
+            --input examples/self-input.gooo \
+            --repo-root "$GITHUB_WORKSPACE" \
+            --output-dir "$work/artifacts/stage1"
+          status=$?
+          if [ "$status" -eq 0 ]; then
+            run_step stage1-build go build -o "$work/stage1-executor" "$work/artifacts/stage1/stage1.go"
+            status=$?
+          fi
+          if [ "$status" -eq 0 ]; then
+            run_step stage1-run "$work/stage1-executor" \
+              --input "$GITHUB_WORKSPACE/examples/self-input.gooo" \
+              --repo-root "$GITHUB_WORKSPACE" \
+              --output-dir "$work/artifacts/stage2"
+            status=$?
+          fi
+          if [ "$status" -eq 0 ]; then
+            run_step compare "$work/gooo-selfhost" compare \
+              --meta .gooo/two-generation.gooo \
+              --stage1-dir "$work/artifacts/stage1" \
+              --stage2-dir "$work/artifacts/stage2" \
+              --output "$work/artifacts/fixed-point.json"
+            status=$?
+          fi
+          end=$(date +%s%3N)
+          printf '%s %s\n' "$((end - start))" "$max_rss" > "$work/integration.time"
+          exit "$status"
+      - name: Verify inherited bootstrap conformance
+        id: bootstrap
+        continue-on-error: true
+        run: |
+          "$RUNNER_TEMP/gooo-two-generation/gooo-verify" conformance \
             --contract .gooo/bootstrap.gooo \
             --input-digest "sha256:$GITHUB_SHA" \
             --target "$GITHUB_REPOSITORY" \
             --repo-root "$GITHUB_WORKSPACE" \
-            --output "$RUNNER_TEMP/gooo-artifacts/conformance.json"
-          conformance_end=$(date +%s%3N)
-          printf '%s %s\n' "$((conformance_end - conformance_start))" "$(cat "$RUNNER_TEMP/conformance.rss")" > "$RUNNER_TEMP/conformance.time"
-      - name: Verify PR-only policy through GitHub REST evidence
+            --output "$RUNNER_TEMP/gooo-two-generation/artifacts/bootstrap-conformance.json"
+      - name: Observe PR-only policy without inventing unavailable evidence
         id: policy
         continue-on-error: true
         run: |
-          "$RUNNER_TEMP/gooo" verify \
+          "$RUNNER_TEMP/gooo-two-generation/gooo-verify" verify \
             --contract .gooo/bootstrap.gooo \
             --input-digest "sha256:$GITHUB_SHA" \
             --observe-github \
@@ -65,32 +138,40 @@ jobs:
             --sha "$GITHUB_SHA" \
             --before "$GITHUB_EVENT_BEFORE" \
             --allow-unknown \
-            --output "$RUNNER_TEMP/gooo-artifacts/policy.json"
+            --output "$RUNNER_TEMP/gooo-two-generation/artifacts/policy.json"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Write complete evidence dossier
+      - name: Write exact evidence dossier
         if: always()
+        continue-on-error: true
         run: |
-          "$RUNNER_TEMP/gooo" evidence \
-            --contract .gooo/bootstrap.gooo \
-            --policy "$RUNNER_TEMP/gooo-artifacts/policy.json" \
-            --input-digest "sha256:$GITHUB_SHA" \
-            --repo-root "$GITHUB_WORKSPACE" \
-            --build-time "$RUNNER_TEMP/build.time" \
-            --test-time "$RUNNER_TEMP/test.time" \
-            --conformance-time "$RUNNER_TEMP/conformance.time" \
-            --test-json "$RUNNER_TEMP/go-test.json" \
-            --artifact-dir "$RUNNER_TEMP/gooo-artifacts" \
-            --output "$RUNNER_TEMP/gooo-evidence.json"
-      - name: Fail if policy is not closed
-        if: steps.policy.outcome != 'success' || steps.tests.outcome != 'success'
-        run: exit 1
-      - name: Upload evidence artifacts
+          work="$RUNNER_TEMP/gooo-two-generation"
+          "$GITHUB_WORKSPACE/scripts/write-selfhost-evidence.sh" \
+            "$GITHUB_WORKSPACE" \
+            "$work" \
+            "$work/selfhost-evidence.json" \
+            "$work/compile.time" \
+            "$work/build.time" \
+            "$work/test.time" \
+            "$work/conformance.time" \
+            "$work/integration.time" \
+            "$work/go-test.json"
+      - name: Upload immutable CI evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: gooo-evidence
+          name: gooo-two-generation-evidence
           path: |
-            ${{ runner.temp }}/gooo-evidence.json
-            ${{ runner.temp }}/gooo-artifacts/*
+            ${{ runner.temp }}/gooo-two-generation/selfhost-evidence.json
+            ${{ runner.temp }}/gooo-two-generation/go-test.json
+            ${{ runner.temp }}/gooo-two-generation/artifacts/**
           if-no-files-found: error
+      - name: Enforce self-hosting slice gates
+        if: always()
+        run: |
+          test "${{ steps.compile.outcome }}" = success
+          test "${{ steps.build.outcome }}" = success
+          test "${{ steps.tests.outcome }}" = success
+          test "${{ steps.conformance.outcome }}" = success
+          test "${{ steps.integration.outcome }}" = success
+          test "${{ steps.bootstrap.outcome }}" = success

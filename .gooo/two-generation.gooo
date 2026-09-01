@@ -1,0 +1,72 @@
+{
+  "schema": "gooo.self-hosting/v1",
+  "authority": "metacode",
+  "contract_id": "gooo-two-generation-bootstrap/self-hosting-slice-v1",
+  "language": {
+    "name": "Gooo",
+    "source_extension": ".gooo",
+    "parser_rules": [
+      {"id": "program-header", "keyword": "program", "node": "program-node", "operands": 1, "operand_kinds": ["identifier"]},
+      {"id": "binding-declaration", "keyword": "let", "node": "binding-node", "operands": 3, "operand_kinds": ["identifier", "equals", "integer"]},
+      {"id": "emission", "keyword": "emit", "node": "emission-node", "operands": 1, "operand_kinds": ["identifier"]}
+    ],
+    "nodes": {
+      "program": "program-node",
+      "binding": "binding-node",
+      "emission": "emission-node"
+    },
+    "ir": {
+      "schema": "gooo.semantic-ir/v1",
+      "normalization": ["sort_bindings_by_name", "preserve_emission_order", "retain_diagnostics_in_source_order"],
+      "fields": ["schema", "program", "bindings", "emissions", "diagnostics"]
+    },
+    "emitter": {
+      "schema": "gooo.generated-artifact/v1",
+      "version": "go-executor-emitter-v1",
+      "output": "go-executor",
+      "template": "deterministic-stage2-main-v1"
+    }
+  },
+  "generation_plan": {
+    "stage0": "trusted_go_executor_consumes_declared_rules_and_emits_stage1_go",
+    "stage1": "generated_stage1_go_consumes_same_input_and_emits_stage2_go",
+    "same_input": "exact_same_gooo_bytes",
+    "compare": ["normalized_semantic_ir_digest", "generated_artifact_digest"],
+    "output_boundary": "caller_owned_temporary_only"
+  },
+  "resolution": {
+    "status_precedence": ["REFUTED", "UNKNOWN", "CLOSED"],
+    "unknown_fields": ["stage", "step", "reason", "unknown_class", "next_operation", "blocked_by"],
+    "unknown_template": {
+      "stage": "parser",
+      "step": "match-declared-rule",
+      "reason": "parser evidence is incomplete",
+      "unknown_class": "parser-coverage",
+      "next_operation": "restore-parser-evidence",
+      "blocked_by": "unresolved-parser-frontier"
+    },
+    "divergence_status": "REFUTED"
+  },
+  "improvement": {
+    "same_scenario_source_contract_toolchain": true,
+    "integer_before_after_required": true,
+    "missing_evidence_status": "UNKNOWN"
+  },
+  "measurements": {
+    "inventory": ["go_files", "gooo_files", "go_physical_lines", "gooo_physical_lines", "subdirectories", "regular_files"],
+    "runtime": ["compile_wall_ms", "build_wall_ms", "test_wall_ms", "conformance_wall_ms", "integration_wall_ms", "peak_rss_kib"],
+    "test_counts": ["total", "selected", "executed", "reused", "failed", "unknown"],
+    "generated_artifacts": ["count", "bytes"]
+  },
+  "corpus": {
+    "selected": ["normal-basic", "normal-sorted-ir", "unknown-token", "unknown-unbound", "refuted-duplicate", "refuted-malformed"],
+    "cases": [
+      {"id": "normal-basic", "source": "examples/corpus/normal-basic.gooo", "expected_status": "CLOSED", "expected_reason": "exact parse and semantic resolution"},
+      {"id": "normal-sorted-ir", "source": "examples/corpus/normal-sorted-ir.gooo", "expected_status": "CLOSED", "expected_reason": "exact parse and semantic resolution"},
+      {"id": "unknown-token", "source": "examples/corpus/unknown-token.gooo", "expected_status": "UNKNOWN", "expected_reason": "no declared parser rule matches token call", "unknown": {"stage": "parser", "step": "match-declared-rule", "reason": "parser evidence is incomplete", "unknown_class": "parser-coverage", "next_operation": "restore-parser-evidence", "blocked_by": "unresolved-parser-frontier"}},
+      {"id": "unknown-unbound", "source": "examples/corpus/unknown-unbound.gooo", "expected_status": "UNKNOWN", "expected_reason": "emitted binding missing has no declaration", "unknown": {"stage": "semantic", "step": "resolve-emission", "reason": "parser evidence is incomplete", "unknown_class": "semantic-resolution", "next_operation": "restore-binding-declaration", "blocked_by": "unresolved-binding"}},
+      {"id": "refuted-duplicate", "source": "examples/corpus/refuted-duplicate.gooo", "expected_status": "REFUTED", "expected_reason": "binding answer is declared more than once"},
+      {"id": "refuted-malformed", "source": "examples/corpus/refuted-malformed.gooo", "expected_status": "REFUTED", "expected_reason": "operand 3 does not satisfy integer"}
+    ]
+  }
+}

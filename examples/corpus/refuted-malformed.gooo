@@ -1,0 +1,3 @@
+program malformed
+let answer = nope
+emit answer

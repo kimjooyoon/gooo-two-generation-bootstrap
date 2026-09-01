@@ -1,3 +1,3 @@
-module github.com/kimjooyoon/gooo-repository-bootstrap
+module github.com/kimjooyoon/gooo-two-generation-bootstrap
 
 go 1.27
