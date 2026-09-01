@@ -327,7 +327,7 @@ func Parse(meta MetaContract, source []byte) ParseOutcome {
 	var unknown *UnknownRecord
 	status := StatusClosed
 	reason := "exact parse and semantic resolution"
-	setUnknown := func(line, detail string) {
+	setUnknown := func(line int, detail string) {
 		if unknown != nil {
 			return
 		}
@@ -526,7 +526,7 @@ func execute(meta MetaContract, metaRaw []byte, inputPath, outputDir, repoRoot, 
 			return err
 		}
 	}
-	return writeJSON(filepath.Join(outputDir, stage+"-result.json"), result)
+	return WriteJSON(filepath.Join(outputDir, stage+"-result.json"), result)
 }
 
 func EnsureCallerOwned(outputDir, repoRoot string) error {
