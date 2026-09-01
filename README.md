@@ -1,31 +1,31 @@
-# Gooo repository bootstrap
+# Gooo two-generation bootstrap
 
-This repository defines a machine-readable bootstrap contract for new Gooo repositories.
-The `.gooo` metacode owns the policy meaning; Go consumes it as an executor and verifier.
+This repository is a deliberately small, executable self-hosting slice for
+Gooo. The authoritative meaning is in
+[`.gooo/two-generation.gooo`](.gooo/two-generation.gooo): it declares the
+three parser rules, normalized semantic IR, deterministic Go emitter, two-stage
+generation plan, corpus denominator, and `REFUTED > UNKNOWN > CLOSED`
+resolution policy.
 
-The root commit is the single permitted `BOOTSTRAP_EXCEPTION`. After it, changes must
-arrive through pull requests. The CI workflow verifies the contract and uploads evidence
-for every run.
+The trusted stage0 command reads those rules and a `.gooo` input, emits a
+standalone stage1 Go executor, and records stage1's normalized IR plus the
+canonical generated-artifact digest. The generated stage1 executor consumes the
+exact same input bytes and emits stage2. CI compares both normalized IR
+digests and both generated-artifact digests. Source text equality alone is not
+the closure condition.
 
-The contract deliberately excludes this root `README.md` from inventory measurements.
+The six-cell parser corpus contains two `CLOSED`, two `UNKNOWN`, and two
+`REFUTED` cases. Unknown results preserve `stage`, `step`, `reason`,
+`unknown_class`, `next_operation`, and `blocked_by`. A fixed-point mismatch is
+reported at the first differing IR path; missing evidence is `UNKNOWN`.
 
-## Operating boundary
+Only the self-hosting slice is evaluated. This is not a whole-language,
+product-value, performance, or global self-improvement claim. Integer
+improvement claims require the same scenario, source, contract, and toolchain
+digests plus an integer before/after pair; otherwise the result remains
+`UNKNOWN`.
 
-The reusable contract separates planning from applying repository mutations. A plan is
-caller-owned output and must be generated before an explicit apply operation. Before apply,
-the target repository must have zero writes. Unknown GitHub API or ruleset observability is
-preserved as `UNKNOWN` with all six required fields; it is never treated as closed.
-
-The contract also makes improvement claims conservative: a same-input-digest integer
-before/after pair is required, otherwise the claim is `UNKNOWN`. Global language
-self-improvement and external utility likewise remain `UNKNOWN` without evidence.
-
-The executor exposes four stages: `plan` writes a deterministic manifest/dossier to a
-caller-owned path, `verify` evaluates observed policy evidence, `conformance` checks the
-canonical cases and repeatability, and `evidence` combines the exact inventory, runtime,
-test, and artifact measurements. None of these stages writes the target repository.
-
-## Status precedence
-
-`REFUTED` outranks `UNKNOWN`, which outranks `CLOSED`. A single observed post-bootstrap
-direct-main commit therefore refutes the policy even when other evidence is unavailable.
+All generated files and reports are written to caller-owned temporary output
+directories. The root `README.md` is excluded from inventory measurements.
+GitHub Actions is the verification authority and records exact inventory,
+runtime, test, conformance, integration, artifact, and digest evidence.

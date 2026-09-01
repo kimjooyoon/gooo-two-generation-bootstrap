@@ -1,0 +1,4 @@
+program unknown
+let answer = 42
+call answer
+emit answer

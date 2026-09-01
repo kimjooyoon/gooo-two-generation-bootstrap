@@ -1,0 +1,5 @@
+program sorted
+let zebra = 7
+let alpha = 3
+emit zebra
+emit alpha

@@ -1,0 +1,4 @@
+program duplicate
+let answer = 1
+let answer = 2
+emit answer
