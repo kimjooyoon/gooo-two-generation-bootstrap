@@ -61,7 +61,7 @@ func TestMinimumDivergencePath(t *testing.T) {
 	outcome := Parse(meta, source)
 	artifact, _, artifactDigest := BuildArtifact(meta, raw, source, outcome.IR)
 	left := StageResult{Schema: "gooo.stage-result/v1", Stage: "stage1", Status: StatusClosed, ContractDigest: Digest(raw), SourceDigest: Digest(source), IRDigest: IRDigest(outcome.IR), IR: outcome.IR, GeneratedArtifactDigest: artifactDigest, GeneratedArtifact: artifact}
-	changed := outcome.IR
+	changed := SemanticIR{Schema: outcome.IR.Schema, Program: outcome.IR.Program, Bindings: append([]Binding(nil), outcome.IR.Bindings...), Emissions: append([]string(nil), outcome.IR.Emissions...), Diagnostics: append([]Diagnostic(nil), outcome.IR.Diagnostics...)}
 	changed.Bindings[0].Value = 43
 	changedArtifact, _, changedDigest := BuildArtifact(meta, raw, source, changed)
 	right := StageResult{Schema: "gooo.stage-result/v1", Stage: "stage2", Status: StatusClosed, ContractDigest: Digest(raw), SourceDigest: Digest(source), IRDigest: IRDigest(changed), IR: changed, GeneratedArtifactDigest: changedDigest, GeneratedArtifact: changedArtifact}

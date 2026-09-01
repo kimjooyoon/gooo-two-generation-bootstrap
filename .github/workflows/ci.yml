@@ -76,25 +76,35 @@ jobs:
           set +e
           start=$(date +%s%3N)
           work="$RUNNER_TEMP/gooo-two-generation"
-          "$work/gooo-selfhost" generate \
+          max_rss=0
+          run_step() {
+            label=$1
+            shift
+            /usr/bin/time -f '%M' -o "$work/$label.rss" "$@"
+            step_status=$?
+            step_rss=$(cat "$work/$label.rss" 2>/dev/null || printf '0')
+            if [ "$step_rss" -gt "$max_rss" ] 2>/dev/null; then max_rss=$step_rss; fi
+            return "$step_status"
+          }
+          run_step stage0 "$work/gooo-selfhost" generate \
             --meta .gooo/two-generation.gooo \
             --input examples/self-input.gooo \
             --repo-root "$GITHUB_WORKSPACE" \
             --output-dir "$work/artifacts/stage1"
           status=$?
           if [ "$status" -eq 0 ]; then
-            go build -o "$work/stage1-executor" "$work/artifacts/stage1/stage1.go"
+            run_step stage1-build go build -o "$work/stage1-executor" "$work/artifacts/stage1/stage1.go"
             status=$?
           fi
           if [ "$status" -eq 0 ]; then
-            "$work/stage1-executor" \
+            run_step stage1-run "$work/stage1-executor" \
               --input "$GITHUB_WORKSPACE/examples/self-input.gooo" \
               --repo-root "$GITHUB_WORKSPACE" \
               --output-dir "$work/artifacts/stage2"
             status=$?
           fi
           if [ "$status" -eq 0 ]; then
-            "$work/gooo-selfhost" compare \
+            run_step compare "$work/gooo-selfhost" compare \
               --meta .gooo/two-generation.gooo \
               --stage1-dir "$work/artifacts/stage1" \
               --stage2-dir "$work/artifacts/stage2" \
@@ -102,7 +112,7 @@ jobs:
             status=$?
           fi
           end=$(date +%s%3N)
-          printf '%s %s\n' "$((end - start))" "$(cat "$work/build.rss" 2>/dev/null || printf '0')" > "$work/integration.time"
+          printf '%s %s\n' "$((end - start))" "$max_rss" > "$work/integration.time"
           exit "$status"
       - name: Verify inherited bootstrap conformance
         id: bootstrap

@@ -14,7 +14,7 @@ test_json=${9:?go test JSON is required}
 read_metric() {
 	local path=$1
 	if [ -f "$path" ]; then
-		awk '{print $1 " " $2}' "$path"
+		awk '$1 ~ /^[0-9]+$/ && $2 ~ /^[0-9]+$/ {print $1 " " $2; found=1} END {if (!found) print "0 0"}' "$path"
 	else
 		printf '0 0\n'
 	fi
@@ -62,13 +62,15 @@ artifact_count=0
 artifact_bytes=0
 if [ -d "$work/artifacts" ]; then
 	artifact_count=$(find "$work/artifacts" -type f | wc -l | tr -d ' ')
-	artifact_bytes=$(find "$work/artifacts" -type f -print0 | xargs -0 stat -c '%s' | awk '{sum += $1} END {print sum + 0}')
+	if [ "$artifact_count" -gt 0 ]; then
+		artifact_bytes=$(find "$work/artifacts" -type f -print0 | xargs -0 stat -c '%s' | awk '{sum += $1} END {print sum + 0}')
+	fi
 fi
 
-test_total=$(jq -s '[.[] | select(.Action == "run" and .Test != "")] | length' "$test_json")
-test_failed=$(jq -s '[.[] | select(.Action == "fail" and .Test != "")] | length' "$test_json")
+test_total=$(jq -s '[.[] | select(.Action == "run" and (.Test // "") != "")] | length' "$test_json")
+test_failed=$(jq -s '[.[] | select(.Action == "fail" and (.Test // "") != "")] | length' "$test_json")
 test_reused=$(jq -s '[.[] | select(.Action == "output" and (.Output // "" | contains("(cached)")))] | length' "$test_json")
-test_skipped=$(jq -s '[.[] | select(.Action == "skip" and .Test != "")] | length' "$test_json")
+test_skipped=$(jq -s '[.[] | select(.Action == "skip" and (.Test // "") != "")] | length' "$test_json")
 selected=$(jq -r '.summary.selected // 0' "$work/artifacts/conformance.json" 2>/dev/null || printf '0')
 conformance_failed=$(jq -r '.summary.failed // 0' "$work/artifacts/conformance.json" 2>/dev/null || printf '0')
 conformance_unknown=$(jq -r '.summary.unknown // 0' "$work/artifacts/conformance.json" 2>/dev/null || printf '0')
